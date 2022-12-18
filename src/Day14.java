@@ -34,7 +34,7 @@ public class Day14 {
         }
 
         System.out.println(fallSand(new HashSet<>(filled), maxY, false));
-        System.out.println(fallSand(new LinkedHashSet<>(filled), maxY + 2, true));
+        System.out.println(fallSand(filled, maxY + 2, true));
     }
 
     private static int fallSand(Set<Point> filled, int maxY, boolean hasMaxFloor) {
