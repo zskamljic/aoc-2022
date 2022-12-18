@@ -2,17 +2,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static java.util.Collections.disjoint;
 
 public class Day16 {
     public static void main(String[] args) throws IOException {
@@ -21,14 +18,19 @@ public class Day16 {
         var valves = input.stream()
             .map(Valve::parse)
             .collect(Collectors.toMap(Valve::name, Function.identity()));
-        var distances = findDistances(valves);
+        var indices = new HashMap<String, Integer>();
+        for (var entry : valves.entrySet()) {
+            indices.put(entry.getKey(), indices.size());
+        }
 
-        part1(distances, valves);
-        part2(distances, valves);
+        var distances = findDistances(valves, indices);
+
+        part1(distances, indices, valves);
+        part2(distances, indices, valves);
     }
 
-    private static void part1(Map<String, Integer> distances, Map<String, Valve> valves) {
-        var result = new Walker(distances, valves).recurse(Set.of(), valves.get("AA"), 30, 0, new HashMap<>())
+    private static void part1(Map<String, Integer> distances, Map<String, Integer> indices, Map<String, Valve> valves) {
+        var result = new Walker(distances, valves, indices).recurse(new BitSet(indices.size()), valves.get("AA"), 30, 0, new HashMap<>())
             .values()
             .stream()
             .mapToInt(i -> i)
@@ -37,14 +39,14 @@ public class Day16 {
         System.out.println(result);
     }
 
-    private static void part2(Map<String, Integer> distances, Map<String, Valve> valves) {
-        var result = new Walker(distances, valves).recurse(Set.of(), valves.get("AA"), 26, 0, new HashMap<>());
+    private static void part2(Map<String, Integer> distances, Map<String, Integer> indices, Map<String, Valve> valves) {
+        var result = new Walker(distances, valves, indices).recurse(new BitSet(indices.size()), valves.get("AA"), 26, 0, new HashMap<>());
 
         var best = result.entrySet()
-            .stream()
+            .parallelStream()
             .flatMapToInt(e ->
                 result.entrySet().stream()
-                    .filter(e2 -> disjoint(e.getKey(), e2.getKey()))
+                    .filter(e2 -> !e.getKey().intersects(e2.getKey()))
                     .mapToInt(e2 -> e.getValue() + e2.getValue())
             )
             .max()
@@ -54,39 +56,36 @@ public class Day16 {
 
     static class Walker {
         private final Map<String, Integer> distances;
-        private final List<Valve> openable;
+        private final int[] openable;
+        private final Valve[] valves;
 
-        public Walker(Map<String, Integer> distances, Map<String, Valve> valves) {
+        public Walker(Map<String, Integer> distances, Map<String, Valve> valves, Map<String, Integer> indices) {
             this.distances = distances;
             openable = valves.values()
                 .stream()
                 .filter(v -> v.rate != 0)
-                .toList();
+                .mapToInt(v -> indices.get(v.name))
+                .toArray();
+            this.valves = new Valve[indices.size()];
+            valves.values()
+                .forEach(v -> this.valves[indices.get(v.name)] = v);
         }
 
-        Map<Set<Valve>, Integer> recurse(Set<Valve> open, Valve current, int timeRemaining, int totalFlow, Map<Set<Valve>, Integer> bestSeen) {
+        Map<BitSet, Integer> recurse(BitSet open, Valve current, int timeRemaining, int totalFlow, Map<BitSet, Integer> bestSeen) {
             bestSeen.merge(open, totalFlow, Math::max);
             for (var candidate : openable) {
-                int timeAfter = timeRemaining - distances.get(current.name + candidate.name) - 1;
-                if (open.contains(candidate) || timeAfter <= 0) continue;
+                int timeAfter = timeRemaining - distances.get(current.name + valves[candidate].name) - 1;
+                if (open.get(candidate) || timeAfter <= 0) continue;
 
-                recurse(join(candidate, open), candidate, timeAfter, timeAfter * candidate.rate + totalFlow, bestSeen);
+                var next = open.get(0, open.size());
+                next.set(candidate, true);
+                recurse(next, valves[candidate], timeAfter, timeAfter * valves[candidate].rate + totalFlow, bestSeen);
             }
             return bestSeen;
         }
-
-        private Set<Valve> join(Valve element, Set<Valve> s) {
-            var ss = new HashSet<>(s);
-            ss.add(element);
-            return ss;
-        }
     }
 
-    private static Map<String, Integer> findDistances(Map<String, Valve> valves) {
-        var indices = new HashMap<String, Integer>();
-        for (var entry : valves.entrySet()) {
-            indices.put(entry.getKey(), indices.size());
-        }
+    private static Map<String, Integer> findDistances(Map<String, Valve> valves, Map<String, Integer> indices) {
         var reached = valves.entrySet()
             .stream()
             .collect(Collectors.toMap(e -> indices.get(e.getKey()), e -> e.getValue().leadsTo.stream().map(indices::get).toList()));
