@@ -10,35 +10,35 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Day23 {
-    private static ProposedMove MOVE_NORTH = (neighbours, proposed, elf) -> {
+    private static final ProposedMove MOVE_NORTH = (neighbours, proposed, elf) -> {
         if (northEmpty(neighbours)) {
             proposed.put(elf, new Point(elf.x, elf.y - 1));
             return true;
         }
         return false;
     };
-    private static ProposedMove MOVE_SOUTH = (neighbours, proposed, elf) -> {
+    private static final ProposedMove MOVE_SOUTH = (neighbours, proposed, elf) -> {
         if (southEmpty(neighbours)) {
             proposed.put(elf, new Point(elf.x, elf.y + 1));
             return true;
         }
         return false;
     };
-    private static ProposedMove MOVE_WEST = (neighbours, proposed, elf) -> {
+    private static final ProposedMove MOVE_WEST = (neighbours, proposed, elf) -> {
         if (westEmpty(neighbours)) {
             proposed.put(elf, new Point(elf.x - 1, elf.y));
             return true;
         }
         return false;
     };
-    private static ProposedMove MOVE_EAST = (neighbours, proposed, elf) -> {
+    private static final ProposedMove MOVE_EAST = (neighbours, proposed, elf) -> {
         if (eastEmpty(neighbours)) {
             proposed.put(elf, new Point(elf.x + 1, elf.y));
             return true;
         }
         return false;
     };
-    private static List<ProposedMove> PROPOSITIONS = List.of(MOVE_NORTH, MOVE_SOUTH, MOVE_WEST, MOVE_EAST);
+    private static final List<ProposedMove> PROPOSITIONS = List.of(MOVE_NORTH, MOVE_SOUTH, MOVE_WEST, MOVE_EAST);
 
     public static void main(String[] args) throws IOException {
         var input = Files.readAllLines(Path.of("input23.txt"));
@@ -103,7 +103,7 @@ public class Day23 {
                 newPositions.add(elf);
                 continue;
             }
-            if (cannotMove(PROPOSITIONS, currentStep, proposedPositions, elf, neighbours)) {
+            if (cannotMove(currentStep, proposedPositions, elf, neighbours)) {
                 newPositions.add(elf);
             }
         }
@@ -128,36 +128,13 @@ public class Day23 {
         return newPositions;
     }
 
-    private static boolean cannotMove(List<ProposedMove> propositions, int i, Map<Point, Point> proposedPositions, Point elf, boolean[] neighbours) {
-        for (int j = 0; j < propositions.size(); j++) {
-            if (propositions.get((j + i) % propositions.size()).propose(neighbours, proposedPositions, elf)) {
+    private static boolean cannotMove(int i, Map<Point, Point> proposedPositions, Point elf, boolean[] neighbours) {
+        for (int j = 0; j < PROPOSITIONS.size(); j++) {
+            if (PROPOSITIONS.get((j + i) % PROPOSITIONS.size()).propose(neighbours, proposedPositions, elf)) {
                 return false;
             }
         }
         return true;
-    }
-
-    private static void print(Set<Point> elves) {
-        var minX = Integer.MAX_VALUE;
-        var maxX = Integer.MIN_VALUE;
-        var minY = Integer.MAX_VALUE;
-        var maxY = Integer.MIN_VALUE;
-        for (var elf : elves) {
-            if (elf.x < minX) minX = elf.x;
-            if (elf.x > maxX) maxX = elf.x;
-            if (elf.y < minY) minY = elf.y;
-            if (elf.y > maxY) maxY = elf.y;
-        }
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                if (elves.contains(new Point(x, y))) {
-                    System.out.print('#');
-                } else {
-                    System.out.print('.');
-                }
-            }
-            System.out.println();
-        }
     }
 
     private static boolean northEmpty(boolean[] neighbours) {
