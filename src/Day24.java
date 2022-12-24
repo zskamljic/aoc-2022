@@ -7,7 +7,9 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Day24 {
     private static final int[][] MOVEMENTS = {
@@ -19,15 +21,7 @@ public class Day24 {
     };
 
     public static void main(String[] args) throws IOException {
-        var input = Arrays.asList("""
-            #.######
-            #>>.<^<#
-            #.<..<<#
-            #>v.><>#
-            #<^v^^>#
-            ######.#""".split("\n"));
-        var input2 = Files.readAllLines(Path.of("input24.txt"));
-        input = input2;
+        var input = Files.readAllLines(Path.of("input24.txt"));
 
         var entrance = new Point(input.get(0).indexOf('.'), 0);
         var exit = new Point(input.get(input.size() - 1).indexOf('.'), input.size() - 1);
@@ -38,13 +32,7 @@ public class Day24 {
         // Don't count walls in size
         var period = (width - 2) * (height - 2) / gcd(width - 2, height - 2);
 
-        // States
-        var states = new ArrayList<Set<Blizzard>>();
-        for (int i = 0; i < period; i++) {
-            states.add(new HashSet<>());
-        }
-
-        makeStates(input, width, height, period, states);
+        var states = makeStates(input, width, height, period);
 
         var part1 = solve(states, 0, width, height, period, entrance, exit);
         System.out.println(part1);
@@ -53,37 +41,48 @@ public class Day24 {
         System.out.println(part1 + back + backAgain);
     }
 
-    private static void makeStates(List<String> input, int width, int height, int period, ArrayList<Set<Blizzard>> states) {
-        for (int y = 0; y < input.size(); y++) {
-            for (int x = 0; x < input.get(y).length(); x++) {
-                switch (input.get(y).charAt(x)) {
-                    case '>' -> states.get(0).add(new Blizzard(x, y, 0));
-                    case 'v' -> states.get(0).add(new Blizzard(x, y, 1));
-                    case '<' -> states.get(0).add(new Blizzard(x, y, 2));
-                    case '^' -> states.get(0).add(new Blizzard(x, y, 3));
-                }
-            }
+    private static List<Set<Point>> makeStates(List<String> input, int width, int height, int period) {
+        var states = new ArrayList<Set<Blizzard>>();
+        for (int i = 0; i < period; i++) {
+            states.add(new HashSet<>());
+        }
 
-            for (int time = 0; time < period - 1; time++) {
-                for (var blizzard : states.get(time)) {
-                    var movement = MOVEMENTS[blizzard.rotation];
-                    var newX = (blizzard.x + movement[0]) % (width - 2);
-                    var newY = (blizzard.y + movement[1]) % (height - 2);
-                    if (newX == 0) newX = width - 2;
-                    if (newY == 0) newY = height - 2;
-                    states.get(time + 1).add(new Blizzard(newX, newY, blizzard.rotation));
-                }
+        for (int y = 0; y < input.size(); y++) {
+            handleBlizzard(input, states, y);
+
+            computeState(width, height, period, states);
+        }
+        return states.stream()
+            .map(state -> state.stream().map(b -> new Point(b.x, b.y)).collect(Collectors.toSet()))
+            .toList();
+    }
+
+    private static void computeState(int width, int height, int period, ArrayList<Set<Blizzard>> states) {
+        for (int time = 0; time < period - 1; time++) {
+            for (var blizzard : states.get(time)) {
+                var movement = MOVEMENTS[blizzard.rotation];
+                var newX = (blizzard.x + movement[0]) % (width - 2);
+                var newY = (blizzard.y + movement[1]) % (height - 2);
+                if (newX == 0) newX = width - 2;
+                if (newY == 0) newY = height - 2;
+                states.get(time + 1).add(new Blizzard(newX, newY, blizzard.rotation));
             }
         }
     }
 
-    private static int solve(List<Set<Blizzard>> states, int startTime, int width, int height, int period, Point start, Point end) {
-        var distances = new int[period][height][width];
-        for (var p : distances) {
-            for (var line : p) {
-                Arrays.fill(line, Integer.MAX_VALUE);
+    private static void handleBlizzard(List<String> input, ArrayList<Set<Blizzard>> states, int y) {
+        for (int x = 0; x < input.get(y).length(); x++) {
+            switch (input.get(y).charAt(x)) {
+                case '>' -> states.get(0).add(new Blizzard(x, y, 0));
+                case 'v' -> states.get(0).add(new Blizzard(x, y, 1));
+                case '<' -> states.get(0).add(new Blizzard(x, y, 2));
+                case '^' -> states.get(0).add(new Blizzard(x, y, 3));
             }
         }
+    }
+
+    private static int solve(List<Set<Point>> states, int startTime, int width, int height, int period, Point start, Point end) {
+        int[][][] distances = makeDistances(width, height, period);
         distances[startTime % period][start.y][start.x] = 0;
 
         var queue = new PriorityQueue<>(Comparator.comparing(State::distance));
@@ -93,25 +92,43 @@ public class Day24 {
             var state = queue.poll();
             if (distances[state.time][state.y][state.x] != state.distance) continue; // We got a better solution
 
-            for (var option : MOVEMENTS) {
-                var newX = state.x + option[0] % width;
-                var newY = state.y + option[1] % height;
-                if (isInvalid(newX, newY, start, end, width, height)) continue; // Wall
-                if (states.get((state.time + 1) % period).stream().anyMatch(b -> b.x == newX && b.y == newY)) {
-                    continue; // Blizzard in next step
-                }
-                if (distances[(state.time + 1) % period][newY][newX] > state.distance + 1) {
-                    distances[(state.time + 1) % period][newY][newX] = state.distance + 1;
-                    var newState = new State(state.distance + 1, (state.time + 1) % period, newX, newY);
-                    queue.add(newState);
-                }
+            handleMovements(states, width, height, period, start, end, distances, queue, state);
+        }
+        return findBest(period, end, distances);
+    }
+
+    private static void handleMovements(List<Set<Point>> states, int width, int height, int period, Point start, Point end, int[][][] distances, Queue<State> queue, State state) {
+        for (var option : MOVEMENTS) {
+            var newX = state.x + option[0] % width;
+            var newY = state.y + option[1] % height;
+            if (isInvalid(newX, newY, start, end, width, height)) continue; // Wall
+            if (states.get((state.time + 1) % period).contains(new Point(newX, newY))) {
+                continue; // Blizzard in next step
+            }
+            if (distances[(state.time + 1) % period][newY][newX] > state.distance + 1) {
+                distances[(state.time + 1) % period][newY][newX] = state.distance + 1;
+                var newState = new State(state.distance + 1, (state.time + 1) % period, newX, newY);
+                queue.add(newState);
             }
         }
+    }
+
+    private static int findBest(int period, Point end, int[][][] distances) {
         var result = Integer.MAX_VALUE;
         for (int time = 0; time < period; time++) {
             result = Math.min(result, distances[time][end.y][end.x]);
         }
         return result;
+    }
+
+    private static int[][][] makeDistances(int width, int height, int period) {
+        var distances = new int[period][height][width];
+        for (var p : distances) {
+            for (var line : p) {
+                Arrays.fill(line, Integer.MAX_VALUE);
+            }
+        }
+        return distances;
     }
 
     private static boolean isInvalid(int newX, int newY, Point start, Point end, int width, int height) {
